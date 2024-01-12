@@ -71,6 +71,7 @@ executable novelbot
     build-depends:
           base ^>=4.17.2.1
         , FunGEn
+        , OpenGL
 
     -- Directories containing source files.
     hs-source-dirs:   exe
