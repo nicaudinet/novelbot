@@ -28,6 +28,9 @@ h = fromIntegral height
 invisMagenta :: [FilePath] -> [(FilePath, InvList)]
 invisMagenta = map (\x -> (x, Just [(255, 0, 255)]))
 
+loadImages :: [String] -> [(FilePath, InvList)]
+loadImages = invisMagenta . map (\s -> "images/" <> s)
+
 main :: IO ()
 main = do
     let winConfig = ((50, 50), (width, height), "Hello world")
@@ -35,7 +38,7 @@ main = do
     let walls = objectGroup "roomGroup" createWalls
     robots <- objectGroup "robotGroup" <$> createRobots
     let bindings = [(Char 'q', Press, \_ _ -> funExit)]
-    let bmpList = invisMagenta ["images/boom.bmp", "images/robot.bmp"]
+    let bmpList = loadImages ["empty.bmp", "robot.bmp", "boom.bmp"]
     funInit
         winConfig -- main window layout
         gameMap -- background
@@ -134,11 +137,45 @@ createWalls = [ wall1, wall2, wall3, wall4, wall5 ]
 -- UPDATES --
 -------------
 
-explode :: GameObject s -> IOGame t s u v ()
+explode :: Object -> IOGame t ObjectState u v ()
 explode obj = do
     replaceObject obj (updateObjectSize (100,100))
-    setObjectCurrentPicture 0 obj
+    setObjectCurrentPicture 2 obj
     setObjectSpeed (0,0) obj
+    attribute <- getObjectAttribute obj
+    case attribute of
+        WallState -> pure ()
+        RobotState _ -> setObjectAttribute (RobotState (Just 0)) obj
+
+updateRobot :: Object -> IOGame t ObjectState u v ()
+updateRobot obj = do
+    attribute <- getObjectAttribute obj
+    case attribute of
+        WallState -> pure ()
+        RobotState Nothing -> pure ()
+        RobotState (Just n) -> do
+            setObjectAttribute (RobotState (Just (n+1))) obj
+            if n < 30
+            then do
+                (sx, sy) <- getObjectSize obj
+                replaceObject obj (updateObjectSize (sx + 1, sy + 1))
+            else do
+                setObjectCurrentPicture 0 obj
+                setObjectAsleep True obj
+    
+collide :: Object -> IOGame () ObjectState () () ()
+collide robot = do
+    -- Vertical wall collisions
+    wall1 <- findObject "wall-1" "roomGroup"
+    wall3 <- findObject "wall-3" "roomGroup"
+    vColl <- objectListObjectCollision [wall1, wall3] robot
+    when vColl (explode robot)
+    -- Horizontal wall collisions
+    wall2 <- findObject "wall-2" "roomGroup"
+    wall4 <- findObject "wall-4" "roomGroup"
+    wall5 <- findObject "wall-5" "roomGroup"
+    hColl <- objectListObjectCollision [wall2, wall4, wall5] robot
+    when hColl (reverseYSpeed robot)
 
 ---------------
 -- GAME LOOP --
@@ -149,15 +186,11 @@ gameCycle = do
     showFPS TimesRoman24 (w - 40, 0) 1.0 0.0 0.0
     robots <- getObjectsFromGroup "robotGroup"
     forM_ robots $ \robot -> do
-        -- Vertical wall collisions
-        wall1 <- findObject "wall-1" "roomGroup"
-        wall3 <- findObject "wall-3" "roomGroup"
-        vColl <- objectListObjectCollision [wall1, wall3] robot
-        when vColl (explode robot)
-        -- Horizontal wall collisions
-        wall2 <- findObject "wall-2" "roomGroup"
-        wall4 <- findObject "wall-4" "roomGroup"
-        wall5 <- findObject "wall-5" "roomGroup"
-        hColl <- objectListObjectCollision [wall2, wall4, wall5] robot
-        when hColl (reverseYSpeed robot)
-
+        -- Collisions
+        attribute <- getObjectAttribute robot
+        case attribute of
+            WallState -> pure ()
+            RobotState Nothing -> collide robot
+            RobotState (Just _) -> pure ()
+        -- Update robots
+        updateRobot robot
