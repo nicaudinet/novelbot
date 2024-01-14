@@ -22,6 +22,7 @@ data ObjectState where
 
 type Object = GameObject ObjectState
 
+type Simulation = IOGame () ObjectState () ()
 width, height :: Int
 width = 800
 height = 800
@@ -140,7 +141,7 @@ createWalls = [wall1, wall2, wall3, wall4, wall5]
 -- UPDATES --
 -------------
 
-explode :: Object -> IOGame t ObjectState u v ()
+explode :: Object -> Simulation ()
 explode obj = do
   replaceObject obj (updateObjectSize (100, 100))
   setObjectCurrentPicture 2 obj
@@ -150,7 +151,7 @@ explode obj = do
     WallState -> pure ()
     RobotState _ -> setObjectAttribute (RobotState (Just 0)) obj
 
-updateRobot :: Object -> IOGame t ObjectState u v ()
+updateRobot :: Object -> Simulation ()
 updateRobot obj = do
   attribute <- getObjectAttribute obj
   case attribute of
@@ -166,7 +167,7 @@ updateRobot obj = do
           setObjectCurrentPicture 0 obj
           setObjectAsleep True obj
 
-collide :: Object -> IOGame () ObjectState () () ()
+collide :: Object -> Simulation ()
 collide robot = do
   -- Vertical wall collisions
   wall1 <- findObject "wall-1" "roomGroup"
@@ -184,7 +185,7 @@ collide robot = do
 -- GAME LOOP --
 ---------------
 
-gameCycle :: IOGame () ObjectState () () ()
+gameCycle :: Simulation ()
 gameCycle = do
   showFPS TimesRoman24 (w - 40, 0) 1.0 0.0 0.0
   robots <- getObjectsFromGroup "robotGroup"
