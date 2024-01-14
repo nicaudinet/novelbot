@@ -3,7 +3,8 @@
 
 module Main where
 
-import Control.Monad (forM_)
+import Control.Monad (forM, forM_)
+import Data.Maybe (catMaybes)
 import Graphics.Rendering.OpenGL (GLdouble, GLfloat)
 import Graphics.UI.Fungen hiding (Position)
 import System.Random (randomRIO)
@@ -23,6 +24,19 @@ data ObjectState where
 type Object = GameObject ObjectState
 
 type Simulation = IOGame () ObjectState () ()
+
+data Direction = North | South | East | West
+
+data SensoryInput where
+  SensoryInput ::
+    { north :: Double,
+      south :: Double,
+      east :: Double,
+      west :: Double
+    } ->
+    SensoryInput
+  deriving (Show)
+
 width, height :: Int
 width = 800
 height = 800
@@ -53,7 +67,7 @@ main = do
     () -- initial game attribute
     bindings -- input bindings
     gameCycle -- step action
-    (Timer 30) -- main loop timing
+    (Timer 2000) -- main loop timing (in milliseconds)
     bmpList -- image files
 
 ----------
@@ -73,7 +87,9 @@ createRobot index = do
       (RobotState Nothing) -- Object Attributes
 
 createRobots :: IO [Object]
-createRobots = mapM createRobot [1 .. 10]
+createRobots = mapM createRobot [1]
+
+-- createRobots = mapM createRobot [1 .. 10]
 
 rectangleBound :: GLdouble -> GLdouble -> [Point2D]
 rectangleBound roomWidth roomHeight =
@@ -137,6 +153,50 @@ createWalls = [wall1, wall2, wall3, wall4, wall5]
           position = (w / 2 - roomWidth / 2 + fst dimentions / 2, h / 2 + roomHeight / 2)
        in createWall 5 dimentions position color
 
+-----------
+-- BRAIN --
+-----------
+
+-- TODO: This function looks like it's doing the right thing but it's not.
+-- Rather than use the wall position, it needs to figure out what the rectangles
+-- are, find the closest side to the point and then find the distance to that
+-- side. The position of the wall should not be used and is misleading
+distanceToWall :: Direction -> Position -> Simulation Double
+distanceToWall direction position = do
+  walls <- getObjectsFromGroup "roomGroup"
+  distances <- forM walls $ \wall -> do
+    wallPosition <- getObjectPosition wall
+    case direction of
+      North -> do
+        let distance = snd wallPosition - snd position
+        if distance > 0
+          then pure (Just distance)
+          else pure Nothing
+      South -> do
+        let distance = snd position - snd wallPosition
+        if distance > 0
+          then pure (Just distance)
+          else pure Nothing
+      East -> do
+        let distance = fst wallPosition - fst position
+        if distance > 0
+          then pure (Just distance)
+          else pure Nothing
+      West -> do
+        let distance = fst position - fst wallPosition
+        if distance > 0
+          then pure (Just distance)
+          else pure Nothing
+  pure (minimum (catMaybes distances))
+
+sense :: Position -> Simulation SensoryInput
+sense position =
+  SensoryInput
+    <$> distanceToWall North position
+    <*> distanceToWall South position
+    <*> distanceToWall East position
+    <*> distanceToWall West position
+
 -------------
 -- UPDATES --
 -------------
@@ -153,6 +213,9 @@ explode obj = do
 
 updateRobot :: Object -> Simulation ()
 updateRobot obj = do
+  position <- getObjectPosition obj
+  sensoryInput <- sense position
+  liftIOtoIOGame $ putStrLn (show sensoryInput)
   attribute <- getObjectAttribute obj
   case attribute of
     WallState -> pure ()
