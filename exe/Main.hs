@@ -46,7 +46,8 @@ data SensoryInput where
     { north :: Maybe Double,
       south :: Maybe Double,
       east :: Maybe Double,
-      west :: Maybe Double
+      west :: Maybe Double,
+      speed :: Point2D
     } ->
     SensoryInput
   deriving (Show)
@@ -55,9 +56,11 @@ width, height :: Int
 width = 800
 height = 800
 
-w, h :: GLdouble
-w = fromIntegral width
-h = fromIntegral height
+ww :: GLdouble -- window width
+ww = fromIntegral width
+
+wh :: GLdouble -- window height
+wh = fromIntegral height
 
 invisMagenta :: [FilePath] -> [(FilePath, InvList)]
 invisMagenta = map (,Just [(255, 0, 255)])
@@ -81,7 +84,7 @@ main = do
     () -- initial game attribute
     bindings -- input bindings
     gameCycle -- step action
-    (Timer 2000) -- main loop timing (in milliseconds)
+    (Timer 30) -- main loop timing (in milliseconds)
     bmpList -- image files
 
 ----------
@@ -96,7 +99,7 @@ createRobot index = do
       ("robot-" <> show index) -- name
       (Tex (25, 25) 1) -- object picture
       False -- asleep
-      (w / 2, h / 2) -- position
+      (ww / 2, wh / 2) -- position
       speed -- speed
       (RobotState Nothing) -- Object Attributes
 
@@ -147,31 +150,31 @@ createWalls = [wall1, wall2, wall3, wall4, wall5]
     wall1 :: Object
     wall1 =
       let dimentions = (thickness, roomHeight + thickness)
-          position = (w / 2 - roomWidth / 2, h / 2)
+          position = (ww / 2 - roomWidth / 2, wh / 2)
        in createWall 1 dimentions position color
 
     wall2 :: Object
     wall2 =
       let dimentions = (roomWidth, thickness)
-          position = (w / 2, h / 2 - roomHeight / 2)
+          position = (ww / 2, wh / 2 - roomHeight / 2)
        in createWall 2 dimentions position color
 
     wall3 :: Object
     wall3 =
       let dimentions = (thickness, roomHeight + thickness)
-          position = (w / 2 + roomWidth / 2, h / 2)
+          position = (ww / 2 + roomWidth / 2, wh / 2)
        in createWall 3 dimentions position color
 
     wall4 :: Object
     wall4 =
       let dimentions = (30, thickness)
-          position = (w / 2 + roomWidth / 2 - 15, h / 2 + roomHeight / 2)
+          position = (ww / 2 + roomWidth / 2 - 15, wh / 2 + roomHeight / 2)
        in createWall 4 dimentions position color
 
     wall5 :: Object
     wall5 =
       let dimentions = (roomWidth - 30 - doorWidth, thickness)
-          position = (w / 2 - roomWidth / 2 + fst dimentions / 2, h / 2 + roomHeight / 2)
+          position = (ww / 2 - roomWidth / 2 + fst dimentions / 2, wh / 2 + roomHeight / 2)
        in createWall 5 dimentions position color
 
 -----------
@@ -215,13 +218,38 @@ distanceToWalls vec = do
     pure (distanceToWall vec wallPos wallBound)
   pure (minimumSafe (catMaybes distances))
 
-sense :: Position -> Simulation SensoryInput
-sense position =
+sense :: Object -> Simulation SensoryInput
+sense obj = do
+  position <- getObjectPosition obj
   SensoryInput
     <$> distanceToWalls (CardinalVector position North)
     <*> distanceToWalls (CardinalVector position South)
     <*> distanceToWalls (CardinalVector position East)
     <*> distanceToWalls (CardinalVector position West)
+    <*> getObjectSpeed obj
+
+-- constant speed
+think :: SensoryInput -> Point2D
+think (SensoryInput n s e w (x, y))
+  | x <= 0 && w `lessThan` dist = (strength, 0)
+  | x > 0 && e `lessThan` dist = (-strength, 0)
+  | y <= 0 && s `lessThan` dist = (0, strength)
+  | y > 0 && n `lessThan` dist = (0, -strength)
+  | otherwise = (0, 0)
+  where
+    dist, strength :: Double
+    dist = 30
+    strength = 1
+
+    lessThan :: Maybe Double -> Double -> Bool
+    lessThan Nothing _ = True
+    lessThan (Just a) b = a < b
+
+act :: Point2D -> Object -> Simulation ()
+act (dx, dy) obj = do
+  speed <- getObjectSpeed obj
+  let newSpeed = (fst speed + dx, snd speed + dy)
+  setObjectSpeed newSpeed obj
 
 -------------
 -- UPDATES --
@@ -237,25 +265,6 @@ explode obj = do
     WallState _ -> pure ()
     RobotState _ -> setObjectAttribute (RobotState (Just 0)) obj
 
-updateRobot :: Object -> Simulation ()
-updateRobot obj = do
-  position <- getObjectPosition obj
-  sensoryInput <- sense position
-  liftIOtoIOGame $ print sensoryInput
-  attribute <- getObjectAttribute obj
-  case attribute of
-    WallState _ -> pure ()
-    RobotState Nothing -> pure ()
-    RobotState (Just n) -> do
-      setObjectAttribute (RobotState (Just (n + 1))) obj
-      if n < 30
-        then do
-          (sx, sy) <- getObjectSize obj
-          replaceObject obj (updateObjectSize (sx + 1, sy + 1))
-        else do
-          setObjectCurrentPicture 0 obj
-          setObjectAsleep True obj
-
 collide :: Object -> Simulation ()
 collide robot = do
   -- Vertical wall collisions
@@ -270,13 +279,33 @@ collide robot = do
   hColl <- objectListObjectCollision [wall2, wall4, wall5] robot
   when hColl (reverseYSpeed robot)
 
+updateRobot :: Object -> Simulation ()
+updateRobot obj = do
+  -- SENSE -> THINK -> ACT loop
+  sensoryInput <- sense obj
+  act (think sensoryInput) obj
+  -- Reaction to collision
+  attribute <- getObjectAttribute obj
+  case attribute of
+    WallState _ -> pure ()
+    RobotState Nothing -> pure ()
+    RobotState (Just n) -> do
+      setObjectAttribute (RobotState (Just (n + 1))) obj
+      if n < 30
+        then do
+          (sx, sy) <- getObjectSize obj
+          replaceObject obj (updateObjectSize (sx + 1, sy + 1))
+        else do
+          setObjectCurrentPicture 0 obj
+          setObjectAsleep True obj
+
 ---------------
 -- GAME LOOP --
 ---------------
 
 gameCycle :: Simulation ()
 gameCycle = do
-  showFPS TimesRoman24 (w - 40, 0) 1.0 0.0 0.0
+  showFPS TimesRoman24 (ww - 40, 0) 1.0 0.0 0.0
   robots <- getObjectsFromGroup "robotGroup"
   forM_ robots $ \robot -> do
     -- Collisions
