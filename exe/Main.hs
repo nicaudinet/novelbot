@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 
 module Main where
@@ -17,9 +18,19 @@ type Position = Point2D
 
 type Color = (GLfloat, GLfloat, GLfloat)
 
+data WallBound where
+  WallBound ::
+    { top :: GLdouble,
+      bottom :: GLdouble,
+      right :: GLdouble,
+      left :: GLdouble
+    } ->
+    WallBound
+  deriving (Show)
+
 data ObjectState where
   RobotState :: {timeSinceBoom :: Maybe Int} -> ObjectState
-  WallState :: ObjectState
+  WallState :: {bound :: WallBound} -> ObjectState
 
 type Object = GameObject ObjectState
 
@@ -27,12 +38,15 @@ type Simulation = IOGame () ObjectState () ()
 
 data Direction = North | South | East | West
 
+data CardinalVector where
+  CardinalVector :: Position -> Direction -> CardinalVector
+
 data SensoryInput where
   SensoryInput ::
-    { north :: Double,
-      south :: Double,
-      east :: Double,
-      west :: Double
+    { north :: Maybe Double,
+      south :: Maybe Double,
+      east :: Maybe Double,
+      west :: Maybe Double
     } ->
     SensoryInput
   deriving (Show)
@@ -89,22 +103,29 @@ createRobot index = do
 createRobots :: IO [Object]
 createRobots = mapM createRobot [1]
 
--- createRobots = mapM createRobot [1 .. 10]
-
-rectangleBound :: GLdouble -> GLdouble -> [Point2D]
+rectangleBound :: GLdouble -> GLdouble -> WallBound
 rectangleBound roomWidth roomHeight =
-  [ (-roomWidth / 2, -roomHeight / 2),
-    (roomWidth / 2, -roomHeight / 2),
-    (roomWidth / 2, roomHeight / 2),
-    (-roomWidth / 2, roomHeight / 2)
-  ] -- CCW order!
+  WallBound
+    { top = roomHeight / 2,
+      bottom = -roomHeight / 2,
+      right = roomWidth / 2,
+      left = -roomWidth / 2
+    }
+
+boundToList :: WallBound -> [Point2D]
+boundToList WallBound {..} =
+  [ (right, top),
+    (left, top),
+    (left, bottom),
+    (right, bottom)
+  ] -- counter-clockwise order
 
 createWall :: Int -> Dimentions -> Position -> Color -> Object
 createWall index dims pos color =
   let bound = uncurry rectangleBound dims
       (r, g, b) = color
-      picture = Basic (Polyg bound r g b Filled)
-   in object ("wall-" <> show index) picture False pos (0, 0) WallState
+      picture = Basic (Polyg (boundToList bound) r g b Filled)
+   in object ("wall-" <> show index) picture False pos (0, 0) (WallState bound)
 
 createWalls :: [Object]
 createWalls = [wall1, wall2, wall3, wall4, wall5]
@@ -157,45 +178,50 @@ createWalls = [wall1, wall2, wall3, wall4, wall5]
 -- BRAIN --
 -----------
 
--- TODO: This function looks like it's doing the right thing but it's not.
--- Rather than use the wall position, it needs to figure out what the rectangles
--- are, find the closest side to the point and then find the distance to that
--- side. The position of the wall should not be used and is misleading
-distanceToWall :: Direction -> Position -> Simulation Double
-distanceToWall direction position = do
+distanceToWall :: CardinalVector -> Position -> WallBound -> Maybe GLdouble
+distanceToWall (CardinalVector (x, y) direction) wallPos wallBound =
+  let t = snd wallPos + top wallBound
+      b = snd wallPos + bottom wallBound
+      r = fst wallPos + right wallBound
+      l = fst wallPos + left wallBound
+   in case direction of
+        North ->
+          if y < b && l < x && x < r
+            then Just (b - y)
+            else Nothing
+        South ->
+          if y > t && l < x && x < r
+            then Just (y - t)
+            else Nothing
+        East ->
+          if x < l && b < y && y < t
+            then Just (l - x)
+            else Nothing
+        West ->
+          if x > r && b < y && y < t
+            then Just (x - r)
+            else Nothing
+
+minimumSafe :: (Ord a) => [a] -> Maybe a
+minimumSafe [] = Nothing
+minimumSafe (x : xs) = Just (foldr min x xs)
+
+distanceToWalls :: CardinalVector -> Simulation (Maybe Double)
+distanceToWalls vec = do
   walls <- getObjectsFromGroup "roomGroup"
   distances <- forM walls $ \wall -> do
-    wallPosition <- getObjectPosition wall
-    case direction of
-      North -> do
-        let distance = snd wallPosition - snd position
-        if distance > 0
-          then pure (Just distance)
-          else pure Nothing
-      South -> do
-        let distance = snd position - snd wallPosition
-        if distance > 0
-          then pure (Just distance)
-          else pure Nothing
-      East -> do
-        let distance = fst wallPosition - fst position
-        if distance > 0
-          then pure (Just distance)
-          else pure Nothing
-      West -> do
-        let distance = fst position - fst wallPosition
-        if distance > 0
-          then pure (Just distance)
-          else pure Nothing
-  pure (minimum (catMaybes distances))
+    wallPos <- getObjectPosition wall
+    WallState wallBound <- getObjectAttribute wall
+    pure (distanceToWall vec wallPos wallBound)
+  pure (minimumSafe (catMaybes distances))
 
 sense :: Position -> Simulation SensoryInput
 sense position =
   SensoryInput
-    <$> distanceToWall North position
-    <*> distanceToWall South position
-    <*> distanceToWall East position
-    <*> distanceToWall West position
+    <$> distanceToWalls (CardinalVector position North)
+    <*> distanceToWalls (CardinalVector position South)
+    <*> distanceToWalls (CardinalVector position East)
+    <*> distanceToWalls (CardinalVector position West)
 
 -------------
 -- UPDATES --
@@ -208,17 +234,17 @@ explode obj = do
   setObjectSpeed (0, 0) obj
   attribute <- getObjectAttribute obj
   case attribute of
-    WallState -> pure ()
+    WallState _ -> pure ()
     RobotState _ -> setObjectAttribute (RobotState (Just 0)) obj
 
 updateRobot :: Object -> Simulation ()
 updateRobot obj = do
   position <- getObjectPosition obj
   sensoryInput <- sense position
-  liftIOtoIOGame $ putStrLn (show sensoryInput)
+  liftIOtoIOGame $ print sensoryInput
   attribute <- getObjectAttribute obj
   case attribute of
-    WallState -> pure ()
+    WallState _ -> pure ()
     RobotState Nothing -> pure ()
     RobotState (Just n) -> do
       setObjectAttribute (RobotState (Just (n + 1))) obj
@@ -256,7 +282,7 @@ gameCycle = do
     -- Collisions
     attribute <- getObjectAttribute robot
     case attribute of
-      WallState -> pure ()
+      WallState _ -> pure ()
       RobotState Nothing -> collide robot
       RobotState (Just _) -> pure ()
     -- Update robots
