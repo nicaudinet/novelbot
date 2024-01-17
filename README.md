@@ -23,3 +23,26 @@ will stick to the Sense-Think-Act model where each time step the robot gets to:
 distance to the nearest wall
 2) Think: processes the information from its senses
 3) Acts: modifies its speed property
+
+In our case, the robot has 4 "eyes" pointing north, south, east and west. Each
+eye essentially measures the distance between the robot and the closest wall in
+that direction. The distance is either finite if there is a wall in that
+direction or infinite if not.
+
+```
+                                  N
+                                  ^
+                                  |
+                            W <-- R --> E
+                                  |
+                                  v
+                                  S
+```
+
+## Roadmap for the little robot brains
+
+- [x] Make the robots gather accurate sensory data
+- [x] Implement noop sense -> think -> act loop
+- [x] Make a simple brain so that the robot no longer touches the walls
+- [ ] Make the brain into a neural network and encode it in a genome
+- [ ] Replicate the simple brain with the neural net
