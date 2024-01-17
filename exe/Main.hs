@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
@@ -6,8 +7,10 @@ module Main where
 
 import Control.Monad (forM, forM_)
 import Data.Maybe (catMaybes)
+import GHC.TypeLits ()
 import Graphics.Rendering.OpenGL (GLdouble, GLfloat)
 import Graphics.UI.Fungen hiding (Position)
+import qualified Numeric.LinearAlgebra.Static as LA (L, headTail, matrix, unrow, (<>))
 import System.Random (randomRIO)
 
 type Name = String
@@ -56,6 +59,8 @@ data SensoryInput where
     } ->
     SensoryInput
   deriving (Show)
+
+type Brain = LA.L 6 2
 
 width, height :: Int
 width = 800
@@ -233,9 +238,36 @@ sense obj = do
     <*> distanceToWalls (CardinalVector position West)
     <*> getObjectSpeed obj
 
--- constant speed
-think :: SensoryInput -> Point2D
-think (SensoryInput n s e w (x, y))
+initBrain :: Brain
+initBrain = LA.matrix (replicate 12 0.001)
+
+distanceToDouble :: Distance -> Double
+distanceToDouble Infinite = 1000
+distanceToDouble (Finite n) = n
+
+senseToMatrix :: SensoryInput -> LA.L 1 6
+senseToMatrix (SensoryInput n s e w (x, y)) =
+  LA.matrix
+    [ distanceToDouble n,
+      distanceToDouble s,
+      distanceToDouble e,
+      distanceToDouble w,
+      x,
+      y
+    ]
+
+matrixToPoint :: LA.L 1 2 -> Point2D
+matrixToPoint matrix =
+  let r = LA.unrow matrix
+      (x, rest) = LA.headTail r
+      (y, _) = LA.headTail rest
+   in (x, y)
+
+think :: SensoryInput -> Brain -> Point2D
+think input brain = matrixToPoint (senseToMatrix input LA.<> brain)
+
+thinkDoNotHitWalls :: SensoryInput -> Brain -> Point2D
+thinkDoNotHitWalls (SensoryInput n s e w (x, y)) _brain
   | x <= 0 && w `lessThan` dist = (strength, 0)
   | x > 0 && e `lessThan` dist = (-strength, 0)
   | y <= 0 && s `lessThan` dist = (0, strength)
@@ -251,10 +283,9 @@ think (SensoryInput n s e w (x, y))
     lessThan (Finite a) b = a < b
 
 act :: Point2D -> Object -> Simulation ()
-act (dx, dy) obj = do
-  speed <- getObjectSpeed obj
-  let newSpeed = (fst speed + dx, snd speed + dy)
-  setObjectSpeed newSpeed obj
+act speed obj = do
+  liftIOtoIOGame $ print speed
+  setObjectSpeed speed obj
 
 -------------
 -- UPDATES --
@@ -288,7 +319,7 @@ updateRobot :: Object -> Simulation ()
 updateRobot obj = do
   -- SENSE -> THINK -> ACT loop
   sensoryInput <- sense obj
-  act (think sensoryInput) obj
+  act (think sensoryInput initBrain) obj
   -- Reaction to collision
   attribute <- getObjectAttribute obj
   case attribute of

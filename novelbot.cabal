@@ -73,6 +73,7 @@ executable novelbot
         , FunGEn
         , OpenGL
         , random
+        , hmatrix
 
     -- Directories containing source files.
     hs-source-dirs:   exe
