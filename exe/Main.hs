@@ -41,12 +41,17 @@ data Direction = North | South | East | West
 data CardinalVector where
   CardinalVector :: Position -> Direction -> CardinalVector
 
+data Distance where
+  Infinite :: Distance
+  Finite :: Double -> Distance
+  deriving (Show)
+
 data SensoryInput where
   SensoryInput ::
-    { north :: Maybe Double,
-      south :: Maybe Double,
-      east :: Maybe Double,
-      west :: Maybe Double,
+    { north :: Distance,
+      south :: Distance,
+      east :: Distance,
+      west :: Distance,
       speed :: Point2D
     } ->
     SensoryInput
@@ -205,18 +210,18 @@ distanceToWall (CardinalVector (x, y) direction) wallPos wallBound =
             then Just (x - r)
             else Nothing
 
-minimumSafe :: (Ord a) => [a] -> Maybe a
-minimumSafe [] = Nothing
-minimumSafe (x : xs) = Just (foldr min x xs)
+minDistance :: [Double] -> Distance
+minDistance [] = Infinite
+minDistance (x : xs) = Finite (foldr min x xs)
 
-distanceToWalls :: CardinalVector -> Simulation (Maybe Double)
+distanceToWalls :: CardinalVector -> Simulation Distance
 distanceToWalls vec = do
   walls <- getObjectsFromGroup "roomGroup"
   distances <- forM walls $ \wall -> do
     wallPos <- getObjectPosition wall
     WallState wallBound <- getObjectAttribute wall
     pure (distanceToWall vec wallPos wallBound)
-  pure (minimumSafe (catMaybes distances))
+  pure (minDistance (catMaybes distances))
 
 sense :: Object -> Simulation SensoryInput
 sense obj = do
@@ -241,9 +246,9 @@ think (SensoryInput n s e w (x, y))
     dist = 30
     strength = 1
 
-    lessThan :: Maybe Double -> Double -> Bool
-    lessThan Nothing _ = True
-    lessThan (Just a) b = a < b
+    lessThan :: Distance -> Double -> Bool
+    lessThan Infinite _ = True
+    lessThan (Finite a) b = a < b
 
 act :: Point2D -> Object -> Simulation ()
 act (dx, dy) obj = do
