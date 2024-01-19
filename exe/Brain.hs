@@ -2,7 +2,9 @@
 {-# LANGUAGE GADTs #-}
 
 module Brain
-  ( steer,
+  ( Brain (..),
+    randomBrain,
+    steer,
   )
 where
 
@@ -11,7 +13,7 @@ import Data.Maybe (catMaybes)
 import GHC.TypeLits ()
 import Graphics.Rendering.OpenGL (GLdouble)
 import Graphics.UI.Fungen
-import qualified Numeric.LinearAlgebra.Static as LA (L, headTail, matrix, unrow, (<>))
+import qualified Numeric.LinearAlgebra.Static as LA (L, headTail, matrix, randn, unrow, (<>))
 import Types (Object, ObjectState (WallState), Simulation, WallBound (..))
 
 data Direction = North | South | East | West
@@ -35,7 +37,7 @@ data SensoryInput where
     SensoryInput
   deriving (Show)
 
-type Brain = LA.L 6 2
+newtype Brain = Brain {unBrain :: (LA.L 6 2)}
 
 distanceToWall :: CardinalVector -> Point2D -> WallBound -> Maybe GLdouble
 distanceToWall (CardinalVector (x, y) direction) wallPos wallBound =
@@ -85,7 +87,10 @@ sense obj = do
     <*> getObjectSpeed obj
 
 initBrain :: Brain
-initBrain = LA.matrix (replicate 12 0.001)
+initBrain = Brain (LA.matrix (replicate 12 0.001))
+
+randomBrain :: Simulation Brain
+randomBrain = liftIOtoIOGame (Brain <$> LA.randn)
 
 distanceToDouble :: Distance -> Double
 distanceToDouble Infinite = 1000
@@ -110,7 +115,7 @@ matrixToPoint matrix =
    in (x, y)
 
 think :: SensoryInput -> Brain -> Point2D
-think input brain = matrixToPoint (senseToMatrix input LA.<> brain)
+think input (Brain brain) = matrixToPoint (senseToMatrix input LA.<> brain)
 
 -- lessThan :: Distance -> Double -> Bool
 -- lessThan Infinite _ = True

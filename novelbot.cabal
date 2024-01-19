@@ -67,6 +67,7 @@ executable novelbot
         , Wall
         , Types
         , Room
+        , Evolve
         , Numeric.LinearAlgebra.Static.Squashable
 
     -- LANGUAGE extensions used by modules in this package.
