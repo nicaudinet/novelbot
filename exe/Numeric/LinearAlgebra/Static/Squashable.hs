@@ -57,3 +57,15 @@ instance
         m1 = unsquash v1 :: L n 1
         m2 = unsquash v2 :: L n (m - 1)
      in m1 ||| m2
+
+class (Squashable n m, UnSquashable n m) => Reshapable n m p q where
+  reshape :: (n T.* m ~ p T.* q) => L n m -> L p q
+
+instance
+  ( Squashable n m,
+    UnSquashable n m,
+    UnSquashable p q
+  ) =>
+  Reshapable n m p q
+  where
+  reshape = unsquash . squash
