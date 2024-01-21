@@ -6,6 +6,7 @@ module Types
   ( -- Basic types
     Color,
     -- Wall Types
+    Line (..),
     WallBound (..),
     -- Brain Types
     Direction (..),
@@ -55,16 +56,21 @@ data CardinalVector where
   CardinalVector :: Point2D -> Direction -> CardinalVector
 
 data Distance where
-  Infinite :: Distance
+  PosInfinite :: Distance
+  NegInfinite :: Distance
   Finite :: Double -> Distance
+  deriving (Show)
+
+data Line where
+  Line :: {from :: (Double, Double), to :: (Double, Double)} -> Line
   deriving (Show)
 
 data SensoryInput where
   SensoryInput ::
-    { north :: Distance,
-      south :: Distance,
-      east :: Distance,
-      west :: Distance,
+    { north :: Maybe Double,
+      south :: Maybe Double,
+      east :: Maybe Double,
+      est :: Maybe Double,
       speed :: Point2D
     } ->
     SensoryInput

@@ -4,13 +4,13 @@
 module Robot
   ( createRobot,
     stepRobot,
+    explode,
   )
 where
 
 import Control.Monad (forM)
-import Data.Maybe (catMaybes)
+import Data.Maybe (fromMaybe)
 import GHC.TypeLits ()
-import Graphics.Rendering.OpenGL (GLdouble)
 import Graphics.UI.Fungen
 import qualified Numeric.LinearAlgebra.Static as LA
   ( L,
@@ -37,7 +37,7 @@ import Types
 ----------------
 
 initBrain :: Brain
-initBrain = Brain $ LA.matrix (replicate 12 0.01)
+initBrain = Brain $ LA.matrix (replicate 12 0.0001)
 
 createRobot :: Point2D -> Int -> IO Object
 createRobot (ww, wh) index = do
@@ -56,7 +56,7 @@ createRobot (ww, wh) index = do
 -- Sensing --
 -------------
 
-distanceToWall :: CardinalVector -> Point2D -> WallBound -> Maybe GLdouble
+distanceToWall :: CardinalVector -> Point2D -> WallBound -> Distance
 distanceToWall (CardinalVector (x, y) direction) wallPos wallBound =
   let t = snd wallPos + top wallBound
       b = snd wallPos + bottom wallBound
@@ -65,33 +65,38 @@ distanceToWall (CardinalVector (x, y) direction) wallPos wallBound =
    in case direction of
         North ->
           if y < b && l < x && x < r
-            then Just (b - y)
-            else Nothing
+            then Finite (b - y)
+            else PosInfinite
         South ->
           if y > t && l < x && x < r
-            then Just (y - t)
-            else Nothing
+            then Finite (y - t)
+            else NegInfinite
         East ->
           if x < l && b < y && y < t
-            then Just (l - x)
-            else Nothing
+            then Finite (l - x)
+            else PosInfinite
         West ->
           if x > r && b < y && y < t
-            then Just (x - r)
-            else Nothing
+            then Finite (x - r)
+            else NegInfinite
 
-minDistance :: [Double] -> Distance
-minDistance [] = Infinite
-minDistance (x : xs) = Finite (foldr min x xs)
+minAbsDistance :: [Distance] -> Maybe Double
+minAbsDistance [] = Nothing
+minAbsDistance (PosInfinite : xs) = minAbsDistance xs
+minAbsDistance (NegInfinite : xs) = minAbsDistance xs
+minAbsDistance (Finite x : xs) =
+  case minAbsDistance xs of
+    Nothing -> Nothing
+    Just y -> Just (min x y)
 
-distanceToWalls :: CardinalVector -> Simulation Distance
+distanceToWalls :: CardinalVector -> Simulation (Maybe Double)
 distanceToWalls vec = do
   walls <- getObjectsFromGroup "roomGroup"
   distances <- forM walls $ \wall -> do
     wallPos <- getObjectPosition wall
     WallState wallBound <- getObjectAttribute wall
     pure (distanceToWall vec wallPos wallBound)
-  pure (minDistance (catMaybes distances))
+  pure (minAbsDistance distances)
 
 sense :: Object -> Simulation SensoryInput
 sense obj = do
@@ -107,17 +112,13 @@ sense obj = do
 -- Think --
 -----------
 
-distanceToDouble :: Distance -> Double
-distanceToDouble Infinite = 1000
-distanceToDouble (Finite n) = n
-
 senseToMatrix :: SensoryInput -> LA.L 1 6
 senseToMatrix (SensoryInput n s e w (x, y)) =
   LA.matrix
-    [ distanceToDouble n,
-      distanceToDouble s,
-      distanceToDouble e,
-      distanceToDouble w,
+    [ fromMaybe 10e3 n,
+      fromMaybe 10e3 s,
+      fromMaybe 10e3 e,
+      fromMaybe 10e3 w,
       x,
       y
     ]
@@ -147,8 +148,32 @@ updatePrevPosition obj = do
 
 act :: Point2D -> Object -> Simulation ()
 act newSpeed obj = do
-  setObjectSpeed newSpeed obj
-  updatePrevPosition obj
+  attribute <- getObjectAttribute obj
+  case attribute of
+    WallState _ -> pure ()
+    RobotState Nothing _ _ -> do
+      setObjectSpeed newSpeed obj
+      updatePrevPosition obj
+    RobotState (Just n) brain prev -> do
+      setObjectAttribute (RobotState (Just (n + 1)) brain prev) obj
+      if n < 30
+        then do
+          (sx, sy) <- getObjectSize obj
+          replaceObject obj (updateObjectSize (sx + 1, sy + 1))
+        else do
+          setObjectCurrentPicture 0 obj
+          setObjectAsleep True obj
+
+explode :: Object -> Simulation ()
+explode obj = do
+  replaceObject obj (updateObjectSize (100, 100))
+  setObjectCurrentPicture 2 obj
+  setObjectSpeed (0, 0) obj
+  attribute <- getObjectAttribute obj
+  case attribute of
+    WallState _ -> pure ()
+    RobotState _ brain pos ->
+      setObjectAttribute (RobotState (Just 0) brain pos) obj
 
 ----------
 -- Step --

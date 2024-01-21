@@ -10,7 +10,7 @@ import Graphics.Rendering.OpenGL (GLdouble)
 import Graphics.UI.Fungen hiding (Position)
 import Robot (createRobot, stepRobot)
 import Room (RoomDims (..), collide, simpleRoom)
-import Types (Object, ObjectState (..), Simulation)
+import Types (ObjectState (..), Simulation)
 
 ----------
 -- INIT --
@@ -43,22 +43,6 @@ robotIds = [1]
 -- GAME LOOP --
 ---------------
 
-reactToCollision :: Object -> Simulation ()
-reactToCollision obj = do
-  attribute <- getObjectAttribute obj
-  case attribute of
-    WallState _ -> pure ()
-    RobotState Nothing _ _ -> pure ()
-    RobotState (Just n) brain prev -> do
-      setObjectAttribute (RobotState (Just (n + 1)) brain prev) obj
-      if n < 30
-        then do
-          (sx, sy) <- getObjectSize obj
-          replaceObject obj (updateObjectSize (sx + 1, sy + 1))
-        else do
-          setObjectCurrentPicture 0 obj
-          setObjectAsleep True obj
-
 gameCycle :: Simulation ()
 gameCycle = do
   showFPS TimesRoman24 (ww - 40, 0) 1.0 0.0 0.0
@@ -68,9 +52,7 @@ gameCycle = do
     attribute <- getObjectAttribute robot
     case attribute of
       WallState _ -> pure ()
-      RobotState Nothing _ _ -> do
-        collide robot
-        reactToCollision robot
+      RobotState Nothing _ _ -> collide robot
       RobotState (Just _) _ _ -> pure ()
     -- Update robots
     stepRobot robot

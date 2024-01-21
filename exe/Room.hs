@@ -11,8 +11,9 @@ where
 import GHC.TypeLits ()
 import Graphics.Rendering.OpenGL (GLdouble)
 import Graphics.UI.Fungen hiding (Position)
-import Types (Color, Object, ObjectState (..), Simulation)
-import Wall (rectangleWall)
+import Robot (explode)
+import Types (Color, Line (..), Object, ObjectState (..), Simulation)
+import Wall (intersectRectangleWall, rectangleWall)
 
 data RoomDims where
   RoomDims ::
@@ -57,27 +58,25 @@ simpleRoom (w, h) RoomDims {..} = [wall1, wall2, wall3, wall4, wall5]
           position = (w / 2 - roomWidth / 2 + fst dimentions / 2, h / 2 + roomHeight / 2)
        in rectangleWall 5 dimentions position wallColor
 
-explode :: Object -> Simulation ()
-explode obj = do
-  replaceObject obj (updateObjectSize (100, 100))
-  setObjectCurrentPicture 2 obj
-  setObjectSpeed (0, 0) obj
-  attribute <- getObjectAttribute obj
-  case attribute of
-    WallState _ -> pure ()
-    RobotState _ brain prevPos ->
-      setObjectAttribute (RobotState (Just 0) brain prevPos) obj
+collideWithWall :: Object -> Object -> Simulation Bool
+collideWithWall robot wall = do
+  currPos <- getObjectPosition robot
+  robotAttribute <- getObjectAttribute robot
+  case robotAttribute of
+    WallState _ -> pure False
+    RobotState _ _ prevPos -> do
+      wallAttribute <- getObjectAttribute wall
+      case wallAttribute of
+        RobotState {} -> pure False
+        WallState bound -> do
+          wallPos <- getObjectPosition wall
+          pure $ intersectRectangleWall (Line prevPos currPos) wallPos bound
+
+collideWithWalls :: Object -> [Object] -> Simulation Bool
+collideWithWalls robot walls = or <$> mapM (collideWithWall robot) walls
 
 collide :: Object -> Simulation ()
 collide robot = do
-  -- Vertical wall collisions
-  wall1 <- findObject "wall-1" "roomGroup"
-  wall3 <- findObject "wall-3" "roomGroup"
-  vColl <- objectListObjectCollision [wall1, wall3] robot
-  when vColl (explode robot)
-  -- Horizontal wall collisions
-  wall2 <- findObject "wall-2" "roomGroup"
-  wall4 <- findObject "wall-4" "roomGroup"
-  wall5 <- findObject "wall-5" "roomGroup"
-  hColl <- objectListObjectCollision [wall2, wall4, wall5] robot
-  when hColl (reverseYSpeed robot)
+  walls <- getObjectsFromGroup "roomGroup"
+  collision <- collideWithWalls robot walls
+  when collision (explode robot)
