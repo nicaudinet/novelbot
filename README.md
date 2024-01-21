@@ -38,8 +38,7 @@ distance to the nearest wall
 - [x] Make the robots gather accurate sensory data
 - [x] Implement noop sense -> think -> act loop
 - [x] Make a simple brain so that the robot no longer touches the walls
-- [ ] Make the brain into a neural network and encode it in a genome
-- [ ] Replicate the simple brain with the neural net
+- [x] Make the brain into a neural network
 
 ## Sensing
 
@@ -69,3 +68,41 @@ Inputs: the 4 distances to the nearest wall in the cardinal directions (N,S,W,E)
 and the 2 speed coordinates (X,Y). 6 total inputs.
 
 Outputs: the 2 new speed coordinates (X',Y').
+
+## Acting
+
+Acting is simple: use the output speed of the thinking process as the new speed.
+NOTE: this assumes the robot can have infinite acceleration.
+
+# Evolution
+
+After giving the robots a little brain, the main task becomes to evolve the
+robots with a genetic algorithm. A nice, simple task for that would be to put
+the robots in a closed room, give them a fixed minimum speed and then train them
+to never crash into the walls.
+
+- Encoding: a vector containing the brain weights
+- Phenotype: the brain matrix (using the nice Squash / UnSquash typeclasses)
+- Init: random numbers above the speed threshold
+- Fitness function: the amount of time the robot stays alive
+    - Lets start with a linear function over this and see how it goes
+- Selection: tournament selection
+- Cross-over: randomly choose a crossover point and swap the second half
+- Mutation: small random change per weight
+- Replacement: generational replacement (change all the population)
+- Elitism: include copy of best individuals from previous generation
+
+## Roadmap for the genetic algorithm
+
+- [ ] Make it so that the robots are always moving (set a minimum speed above
+    zero)
+- [x] Implement the encoding / decoding from the phenotype (Brain) to genotype
+  (vector of weights)
+- [ ] Initialise brains
+- [ ] Implement the fitness function (keep track of time alive)
+- [ ] Implement selection
+- [ ] Implement crossover
+- [ ] Implement mutation
+- [ ] Implement replacement and elitism
+
+# Novelty Search
