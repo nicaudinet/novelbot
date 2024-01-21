@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Room
@@ -8,6 +9,7 @@ module Room
   )
 where
 
+import Data.Maybe (catMaybes)
 import GHC.TypeLits ()
 import Graphics.Rendering.OpenGL (GLdouble)
 import Graphics.UI.Fungen hiding (Position)
@@ -58,25 +60,45 @@ simpleRoom (w, h) RoomDims {..} = [wall1, wall2, wall3, wall4, wall5]
           position = (w / 2 - roomWidth / 2 + fst dimentions / 2, h / 2 + roomHeight / 2)
        in rectangleWall 5 dimentions position wallColor
 
-collideWithWall :: Object -> Object -> Simulation Bool
+collideWithWall :: Object -> Object -> Simulation (Maybe Point2D)
 collideWithWall robot wall = do
   currPos <- getObjectPosition robot
   robotAttribute <- getObjectAttribute robot
   case robotAttribute of
-    WallState _ -> pure False
+    WallState _ -> pure Nothing
     RobotState _ _ prevPos -> do
       wallAttribute <- getObjectAttribute wall
       case wallAttribute of
-        RobotState {} -> pure False
+        RobotState {} -> pure Nothing
         WallState bound -> do
           wallPos <- getObjectPosition wall
-          pure $ intersectRectangleWall (Line prevPos currPos) wallPos bound
+          case intersectRectangleWall (Line prevPos currPos) wallPos bound of
+            [] -> pure Nothing
+            points ->
+              let meanX = sum (map fst points) / fromIntegral (length points)
+                  meanY = sum (map snd points) / fromIntegral (length points)
+               in pure (Just (meanX, meanY))
 
-collideWithWalls :: Object -> [Object] -> Simulation Bool
-collideWithWalls robot walls = or <$> mapM (collideWithWall robot) walls
+collideWithWalls :: Object -> [Object] -> Simulation [Point2D]
+collideWithWalls robot walls = catMaybes <$> mapM (collideWithWall robot) walls
+
+distance :: Point2D -> Point2D -> Double
+distance (x1, y1) (x2, y2) =
+  sqrt ((x1 - x2) ^ (2 :: Integer) + (y1 - y2) ^ (2 :: Integer))
+
+closestTo :: Point2D -> [Point2D] -> Maybe Point2D
+closestTo _ [] = Nothing
+closestTo p (x : xs) =
+  case closestTo p xs of
+    Nothing -> Just x
+    Just y -> if distance p x < distance p y then Just x else Just y
 
 collide :: Object -> Simulation ()
 collide robot = do
   walls <- getObjectsFromGroup "roomGroup"
-  collision <- collideWithWalls robot walls
-  when collision (explode robot)
+  collisions <- collideWithWalls robot walls
+  pos <- getObjectPosition robot
+  case closestTo pos collisions of
+    Nothing -> pure ()
+    Just p -> do
+      explode p robot

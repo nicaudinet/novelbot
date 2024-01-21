@@ -37,7 +37,7 @@ import Types
 ----------------
 
 initBrain :: Brain
-initBrain = Brain $ LA.matrix (replicate 12 0.0001)
+initBrain = Brain $ LA.matrix (replicate 12 0.01)
 
 createRobot :: Point2D -> Int -> IO Object
 createRobot (ww, wh) index = do
@@ -154,8 +154,8 @@ act newSpeed obj = do
     RobotState Nothing _ _ -> do
       setObjectSpeed newSpeed obj
       updatePrevPosition obj
-    RobotState (Just n) brain prev -> do
-      setObjectAttribute (RobotState (Just (n + 1)) brain prev) obj
+    RobotState (Just n) brain pos -> do
+      setObjectAttribute (RobotState (Just (n + 1)) brain pos) obj
       if n < 30
         then do
           (sx, sy) <- getObjectSize obj
@@ -164,15 +164,16 @@ act newSpeed obj = do
           setObjectCurrentPicture 0 obj
           setObjectAsleep True obj
 
-explode :: Object -> Simulation ()
-explode obj = do
-  replaceObject obj (updateObjectSize (100, 100))
-  setObjectCurrentPicture 2 obj
-  setObjectSpeed (0, 0) obj
+explode :: Point2D -> Object -> Simulation ()
+explode pos obj = do
   attribute <- getObjectAttribute obj
   case attribute of
     WallState _ -> pure ()
-    RobotState _ brain pos ->
+    RobotState _ brain _ -> do
+      replaceObject obj (updateObjectSize (100, 100))
+      setObjectCurrentPicture 2 obj
+      setObjectSpeed (0, 0) obj
+      setObjectPosition pos obj
       setObjectAttribute (RobotState (Just 0) brain pos) obj
 
 ----------

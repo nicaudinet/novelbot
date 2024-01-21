@@ -20,7 +20,7 @@ this thing, but it's fun!
 - [x] Make the walls
 - [x] Make the robot
 - [x] Make the robot explode when it touches the vertical walls
-- [ ] Ensure that if the robot speed is large it cannot just jump over the walls
+- [x] Ensure that if the robot speed is large it cannot just jump over the walls
 
 # Braains
 

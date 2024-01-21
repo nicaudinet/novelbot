@@ -8,6 +8,7 @@ module Wall
   )
 where
 
+import Data.Maybe (catMaybes)
 import Graphics.Rendering.OpenGL (GLdouble)
 import Graphics.UI.Fungen
 import Types (Color, Line (..), Object, ObjectState (WallState), WallBound (..))
@@ -46,14 +47,45 @@ intersectLine (Line a b) (Line c d) =
     ccw (ax, ay) (bx, by) (cx, cy) =
       (cy - ay) * (bx - ax) > (by - ay) * (cx - ax)
 
-intersectRectangleWall :: Line -> Point2D -> WallBound -> Bool
+-- (x1,y1) -- (x2,y2)  => y = m1 * x + c1
+-- m1 = (y2 - y1) / (x2 - x1)
+-- c1 = y1 - m1 * x1
+--
+-- (a1,b1) -- (a2,b2)  => b = m2 * a + c2
+-- m2 = (b2 - b1) / (a2 - a1)
+-- c2 = b1 - m2 * a1
+--
+-- Intersection when:
+-- y = b
+-- => m1 * x + c1 = m2 * x + c2
+-- => x * (m1 - m2) = c2 - c1
+-- => x = (c2 - c1) / (m1 - m2)
+-- => y = m1 * x + c1
+intersectLinePoint :: Line -> Line -> Maybe Point2D
+intersectLinePoint line1 line2 =
+  if not (intersectLine line1 line2)
+    then Nothing
+    else
+      let Line (x1, y1) (x2, y2) = line1
+          Line (a1, b1) (a2, b2) = line2
+          m1 = (y2 - y1) / (x2 - x1)
+          c1 = y1 - m1 * x1
+          m2 = (b2 - b1) / (a2 - a1)
+          c2 = b1 - m2 * a1
+          x = (c2 - c1) / (m1 - m2)
+          y = m1 * x + c1
+       in Just (x, y)
+
+intersectRectangleWall :: Line -> Point2D -> WallBound -> [Point2D]
 intersectRectangleWall line wallPos wallBound =
   let t = snd wallPos + top wallBound
       b = snd wallPos + bottom wallBound
       r = fst wallPos + right wallBound
       l = fst wallPos + left wallBound
-      topIntersect = intersectLine line (Line (l, t) (r, t))
-      bottomIntersect = intersectLine line (Line (l, b) (r, b))
-      rightIntersect = intersectLine line (Line (r, b) (r, t))
-      leftIntersect = intersectLine line (Line (l, b) (l, t))
-   in topIntersect || bottomIntersect || rightIntersect || leftIntersect
+      topSide = Line (l, t) (r, t)
+      bottomSide = Line (l, b) (r, b)
+      rightSide = Line (r, b) (r, t)
+      leftSide = Line (l, b) (l, t)
+      sides = [topSide, bottomSide, rightSide, leftSide]
+      intersections = map (intersectLinePoint line) sides
+   in catMaybes intersections
