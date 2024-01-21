@@ -106,3 +106,8 @@ to never crash into the walls.
 - [ ] Implement replacement and elitism
 
 # Novelty Search
+
+Goal: replace the fitness function of the genetic algorithm with a function that
+rewards novel behaviour instead.
+
+How should I measure difference in behaviour though?
