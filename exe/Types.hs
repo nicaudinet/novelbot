@@ -77,8 +77,13 @@ newtype Brain = Brain {unBrain :: LA.L 6 2}
 ------------------
 
 data ObjectState where
-  RobotState :: {timeSinceBoom :: Maybe Int, robotBrain :: Brain} -> ObjectState
   WallState :: {bound :: WallBound} -> ObjectState
+  RobotState ::
+    { timeSinceBoom :: Maybe Int,
+      robotBrain :: Brain,
+      prevPos :: Point2D
+    } ->
+    ObjectState
 
 type Object = GameObject ObjectState
 

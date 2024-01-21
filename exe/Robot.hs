@@ -1,10 +1,9 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 
-module Brain
-  ( randomBrain,
-    initBrain,
-    steer,
+module Robot
+  ( createRobot,
+    stepRobot,
   )
 where
 
@@ -17,10 +16,10 @@ import qualified Numeric.LinearAlgebra.Static as LA
   ( L,
     headTail,
     matrix,
-    randn,
     unrow,
     (<>),
   )
+import System.Random (randomRIO)
 import Types
   ( Brain (..),
     CardinalVector (..),
@@ -32,6 +31,30 @@ import Types
     Simulation,
     WallBound (..),
   )
+
+----------------
+-- Robot init --
+----------------
+
+initBrain :: Brain
+initBrain = Brain $ LA.matrix (replicate 12 0.01)
+
+createRobot :: Point2D -> Int -> IO Object
+createRobot (ww, wh) index = do
+  robotSpeed <- (,) <$> randomRIO (-5, 5) <*> randomRIO (-5, 5)
+  let position = (ww / 2, wh / 2)
+  pure $
+    object
+      ("robot-" <> show index) -- name
+      (Tex (25, 25) 1) -- object picture
+      False -- asleep
+      position -- position
+      robotSpeed -- speed
+      (RobotState Nothing initBrain position) -- Object Attributes
+
+-------------
+-- Sensing --
+-------------
 
 distanceToWall :: CardinalVector -> Point2D -> WallBound -> Maybe GLdouble
 distanceToWall (CardinalVector (x, y) direction) wallPos wallBound =
@@ -80,11 +103,9 @@ sense obj = do
     <*> distanceToWalls (CardinalVector position West)
     <*> getObjectSpeed obj
 
-initBrain :: Brain
-initBrain = Brain $ LA.matrix (replicate 12 0.01)
-
-randomBrain :: Simulation Brain
-randomBrain = liftIOtoIOGame (Brain <$> LA.randn)
+-----------
+-- Think --
+-----------
 
 distanceToDouble :: Distance -> Double
 distanceToDouble Infinite = 1000
@@ -111,31 +132,33 @@ matrixToPoint matrix =
 think :: SensoryInput -> Brain -> Point2D
 think input (Brain brain) = matrixToPoint (senseToMatrix input LA.<> brain)
 
--- lessThan :: Distance -> Double -> Bool
--- lessThan Infinite _ = True
--- lessThan (Finite a) b = a < b
---
--- thinkDoNotHitWalls :: SensoryInput -> Brain -> Point2D
--- thinkDoNotHitWalls (SensoryInput n s e w (x, y)) _brain
---   | x <= 0 && w `lessThan` dist = (strength, 0)
---   | x > 0 && e `lessThan` dist = (-strength, 0)
---   | y <= 0 && s `lessThan` dist = (0, strength)
---   | y > 0 && n `lessThan` dist = (0, -strength)
---   | otherwise = (0, 0)
---   where
---     dist, strength :: Double
---     dist = 30
---     strength = 1
+---------
+-- Act --
+---------
 
-act :: Point2D -> Object -> Simulation ()
-act = setObjectSpeed
-
--- SENSE -> THINK -> ACT loop
-steer :: Object -> Simulation ()
-steer obj = do
+updatePrevPosition :: Object -> Simulation ()
+updatePrevPosition obj = do
+  position <- getObjectPosition obj
   attribute <- getObjectAttribute obj
   case attribute of
     WallState _ -> pure ()
-    RobotState _ brain -> do
+    RobotState time brain _ ->
+      setObjectAttribute (RobotState time brain position) obj
+
+act :: Point2D -> Object -> Simulation ()
+act newSpeed obj = do
+  setObjectSpeed newSpeed obj
+  updatePrevPosition obj
+
+----------
+-- Step --
+----------
+
+stepRobot :: Object -> Simulation ()
+stepRobot obj = do
+  attribute <- getObjectAttribute obj
+  case attribute of
+    WallState _ -> pure ()
+    RobotState _ brain _ -> do
       sensoryInput <- sense obj
       act (think sensoryInput brain) obj

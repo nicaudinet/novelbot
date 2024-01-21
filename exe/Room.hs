@@ -65,7 +65,8 @@ explode obj = do
   attribute <- getObjectAttribute obj
   case attribute of
     WallState _ -> pure ()
-    RobotState _ brain -> setObjectAttribute (RobotState (Just 0) brain) obj
+    RobotState _ brain prevPos ->
+      setObjectAttribute (RobotState (Just 0) brain prevPos) obj
 
 collide :: Object -> Simulation ()
 collide robot = do
