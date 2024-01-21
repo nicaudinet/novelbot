@@ -2,8 +2,8 @@
 {-# LANGUAGE GADTs #-}
 
 module Brain
-  ( Brain (..),
-    randomBrain,
+  ( randomBrain,
+    initBrain,
     steer,
   )
 where
@@ -13,31 +13,25 @@ import Data.Maybe (catMaybes)
 import GHC.TypeLits ()
 import Graphics.Rendering.OpenGL (GLdouble)
 import Graphics.UI.Fungen
-import qualified Numeric.LinearAlgebra.Static as LA (L, headTail, matrix, randn, unrow, (<>))
-import Types (Object, ObjectState (WallState), Simulation, WallBound (..))
-
-data Direction = North | South | East | West
-
-data CardinalVector where
-  CardinalVector :: Point2D -> Direction -> CardinalVector
-
-data Distance where
-  Infinite :: Distance
-  Finite :: Double -> Distance
-  deriving (Show)
-
-data SensoryInput where
-  SensoryInput ::
-    { north :: Distance,
-      south :: Distance,
-      east :: Distance,
-      west :: Distance,
-      speed :: Point2D
-    } ->
-    SensoryInput
-  deriving (Show)
-
-newtype Brain = Brain {unBrain :: (LA.L 6 2)}
+import qualified Numeric.LinearAlgebra.Static as LA
+  ( L,
+    headTail,
+    matrix,
+    randn,
+    unrow,
+    (<>),
+  )
+import Types
+  ( Brain (..),
+    CardinalVector (..),
+    Direction (..),
+    Distance (..),
+    Object,
+    ObjectState (..),
+    SensoryInput (..),
+    Simulation,
+    WallBound (..),
+  )
 
 distanceToWall :: CardinalVector -> Point2D -> WallBound -> Maybe GLdouble
 distanceToWall (CardinalVector (x, y) direction) wallPos wallBound =
@@ -87,7 +81,7 @@ sense obj = do
     <*> getObjectSpeed obj
 
 initBrain :: Brain
-initBrain = Brain (LA.matrix (replicate 12 0.001))
+initBrain = Brain $ LA.matrix (replicate 12 0.01)
 
 randomBrain :: Simulation Brain
 randomBrain = liftIOtoIOGame (Brain <$> LA.randn)
@@ -139,5 +133,9 @@ act = setObjectSpeed
 -- SENSE -> THINK -> ACT loop
 steer :: Object -> Simulation ()
 steer obj = do
-  sensoryInput <- sense obj
-  act (think sensoryInput initBrain) obj
+  attribute <- getObjectAttribute obj
+  case attribute of
+    WallState _ -> pure ()
+    RobotState _ brain -> do
+      sensoryInput <- sense obj
+      act (think sensoryInput brain) obj

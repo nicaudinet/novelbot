@@ -2,9 +2,9 @@
 
 module Evolve where
 
-import Brain (Brain (..))
 import Numeric.LinearAlgebra.Static (R)
 import Numeric.LinearAlgebra.Static.Squashable (squash, unsquash)
+import Types (Brain (..))
 
 type Genome = R 12
 

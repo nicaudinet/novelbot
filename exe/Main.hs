@@ -4,7 +4,7 @@
 
 module Main where
 
-import Brain (steer)
+import Brain (initBrain, steer)
 import Control.Monad (forM_)
 import GHC.TypeLits ()
 import Graphics.Rendering.OpenGL (GLdouble)
@@ -47,7 +47,7 @@ createRobot index = do
       False -- asleep
       (ww / 2, wh / 2) -- position
       speed -- speed
-      (RobotState Nothing) -- Object Attributes
+      (RobotState Nothing initBrain) -- Object Attributes
 
 createRobots :: IO [Object]
 createRobots = mapM createRobot [1]
@@ -61,9 +61,9 @@ reactToCollision obj = do
   attribute <- getObjectAttribute obj
   case attribute of
     WallState _ -> pure ()
-    RobotState Nothing -> pure ()
-    RobotState (Just n) -> do
-      setObjectAttribute (RobotState (Just (n + 1))) obj
+    RobotState Nothing _ -> pure ()
+    RobotState (Just n) brain -> do
+      setObjectAttribute (RobotState (Just (n + 1)) brain) obj
       if n < 30
         then do
           (sx, sy) <- getObjectSize obj
@@ -81,10 +81,10 @@ gameCycle = do
     attribute <- getObjectAttribute robot
     case attribute of
       WallState _ -> pure ()
-      RobotState Nothing -> do
+      RobotState Nothing _ -> do
         collide robot
         reactToCollision robot
-      RobotState (Just _) -> pure ()
+      RobotState (Just _) _ -> pure ()
     -- Update robots
     steer robot
 
