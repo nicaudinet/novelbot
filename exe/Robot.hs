@@ -9,6 +9,7 @@ module Robot
 where
 
 import Control.Monad (forM)
+import Data.Bifunctor (bimap)
 import Data.Maybe (fromMaybe)
 import GHC.TypeLits ()
 import Graphics.UI.Fungen
@@ -37,7 +38,7 @@ import Types
 ----------------
 
 initBrain :: Brain
-initBrain = Brain $ LA.matrix (replicate 12 0.01)
+initBrain = Brain $ LA.matrix (replicate 12 0.0000001)
 
 createRobot :: Point2D -> Int -> IO Object
 createRobot (ww, wh) index = do
@@ -147,11 +148,13 @@ updatePrevPosition obj = do
       setObjectAttribute (RobotState time brain position) obj
 
 act :: Point2D -> Object -> Simulation ()
-act newSpeed obj = do
+act acc obj = do
   attribute <- getObjectAttribute obj
   case attribute of
     WallState _ -> pure ()
     RobotState Nothing _ _ -> do
+      s <- getObjectSpeed obj
+      let newSpeed = bimap (fst s +) (snd s +) acc
       setObjectSpeed newSpeed obj
       updatePrevPosition obj
     RobotState (Just n) brain pos -> do

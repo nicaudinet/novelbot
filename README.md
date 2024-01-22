@@ -71,7 +71,9 @@ Outputs: the 2 new speed coordinates (X',Y').
 
 ## Acting
 
-Acting is simple: use the output speed of the thinking process as the new speed.
+Acting is simple: the thinking process outputs an acceleation which is added
+onto the speed.
+
 NOTE: this assumes the robot can have infinite acceleration.
 
 # Evolution
