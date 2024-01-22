@@ -1,5 +1,4 @@
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Room
@@ -66,7 +65,7 @@ collideWithWall robot wall = do
   robotAttribute <- getObjectAttribute robot
   case robotAttribute of
     WallState _ -> pure Nothing
-    RobotState _ _ prevPos -> do
+    RobotState {..} -> do
       wallAttribute <- getObjectAttribute wall
       case wallAttribute of
         RobotState {} -> pure Nothing

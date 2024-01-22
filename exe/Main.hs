@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 
 module Main where
@@ -52,9 +53,10 @@ gameCycle = do
     attribute <- getObjectAttribute robot
     case attribute of
       WallState _ -> pure ()
-      RobotState Nothing _ _ -> collide robot
-      RobotState (Just _) _ _ -> pure ()
-    -- Update robots
+      RobotState {..} ->
+        case timeSinceBoom of
+          Nothing -> collide robot
+          Just _ -> pure ()
     stepRobot robot
 
 ------------

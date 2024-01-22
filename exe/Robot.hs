@@ -9,7 +9,6 @@ module Robot
 where
 
 import Control.Monad (forM)
-import Data.Bifunctor (bimap)
 import Data.Maybe (fromMaybe)
 import GHC.TypeLits ()
 import Graphics.UI.Fungen
@@ -56,7 +55,7 @@ createRobot (ww, wh) index = do
       False -- asleep
       position -- position
       robotSpeed -- speed
-      (RobotState Nothing brain position) -- Object Attributes
+      (RobotState 0 Nothing brain position) -- Object Attributes
 
 -------------
 -- Sensing --
@@ -143,46 +142,45 @@ think input (Brain brain) = matrixToPoint (senseToMatrix input LA.<> brain)
 -- Act --
 ---------
 
-updatePrevPosition :: Object -> Simulation ()
-updatePrevPosition obj = do
-  position <- getObjectPosition obj
-  attribute <- getObjectAttribute obj
-  case attribute of
-    WallState _ -> pure ()
-    RobotState time brain _ ->
-      setObjectAttribute (RobotState time brain position) obj
-
 act :: Point2D -> Object -> Simulation ()
 act acc obj = do
   attribute <- getObjectAttribute obj
   case attribute of
     WallState _ -> pure ()
-    RobotState Nothing _ _ -> do
-      s <- getObjectSpeed obj
-      let newSpeed = bimap (fst s +) (snd s +) acc
-      setObjectSpeed newSpeed obj
-      updatePrevPosition obj
-    RobotState (Just n) brain pos -> do
-      setObjectAttribute (RobotState (Just (n + 1)) brain pos) obj
-      if n < 30
-        then do
-          (sx, sy) <- getObjectSize obj
-          replaceObject obj (updateObjectSize (sx + 1, sy + 1))
-        else do
-          setObjectCurrentPicture 0 obj
-          setObjectAsleep True obj
+    robot ->
+      case timeSinceBoom robot of
+        Nothing -> do
+          -- Accelerate
+          robotSpeed <- getObjectSpeed obj
+          let newSpeed = (fst robotSpeed + fst acc, snd robotSpeed + snd acc)
+          setObjectSpeed newSpeed obj
+          -- Update previous position
+          pos <- getObjectPosition obj
+          let newRobot =
+                robot {prevPos = pos, timeSinceStart = 1 + timeSinceStart robot}
+          setObjectAttribute newRobot obj
+        Just n -> do
+          setObjectAttribute (robot {timeSinceBoom = Just (n + 1)}) obj
+          if n < 30
+            then do
+              (sx, sy) <- getObjectSize obj
+              replaceObject obj (updateObjectSize (sx + 1, sy + 1))
+            else do
+              setObjectCurrentPicture 0 obj
+              setObjectAsleep True obj
 
 explode :: Point2D -> Object -> Simulation ()
 explode pos obj = do
   attribute <- getObjectAttribute obj
   case attribute of
     WallState _ -> pure ()
-    RobotState _ brain _ -> do
+    robot -> do
       replaceObject obj (updateObjectSize (100, 100))
       setObjectCurrentPicture 2 obj
       setObjectSpeed (0, 0) obj
       setObjectPosition pos obj
-      setObjectAttribute (RobotState (Just 0) brain pos) obj
+      let newRobot = robot {timeSinceBoom = Just 0, prevPos = pos}
+      setObjectAttribute newRobot obj
 
 ----------
 -- Step --
@@ -193,6 +191,6 @@ stepRobot obj = do
   attribute <- getObjectAttribute obj
   case attribute of
     WallState _ -> pure ()
-    RobotState _ brain _ -> do
+    robot -> do
       sensoryInput <- sense obj
-      act (think sensoryInput brain) obj
+      act (think sensoryInput (robotBrain robot)) obj
