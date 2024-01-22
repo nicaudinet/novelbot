@@ -100,7 +100,7 @@ to never crash into the walls.
     zero)
 - [x] Implement the encoding / decoding from the phenotype (Brain) to genotype
   (vector of weights)
-- [ ] Initialise brains
+- [x] Initialise brains
 - [ ] Implement the fitness function (keep track of time alive)
 - [ ] Implement selection
 - [ ] Implement crossover

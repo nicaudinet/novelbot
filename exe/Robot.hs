@@ -13,6 +13,7 @@ import Data.Bifunctor (bimap)
 import Data.Maybe (fromMaybe)
 import GHC.TypeLits ()
 import Graphics.UI.Fungen
+import Numeric.LinearAlgebra.Static (randn)
 import qualified Numeric.LinearAlgebra.Static as LA
   ( L,
     headTail,
@@ -37,13 +38,17 @@ import Types
 -- Robot init --
 ----------------
 
-initBrain :: Brain
-initBrain = Brain $ LA.matrix (replicate 12 0.0000001)
+-- initBrain :: Brain
+-- initBrain = Brain $ LA.matrix (replicate 12 0.0000001)
+
+randomBrain :: IO Brain
+randomBrain = Brain <$> randn
 
 createRobot :: Point2D -> Int -> IO Object
 createRobot (ww, wh) index = do
   robotSpeed <- (,) <$> randomRIO (-5, 5) <*> randomRIO (-5, 5)
   let position = (ww / 2, wh / 2)
+  brain <- randomBrain
   pure $
     object
       ("robot-" <> show index) -- name
@@ -51,7 +56,7 @@ createRobot (ww, wh) index = do
       False -- asleep
       position -- position
       robotSpeed -- speed
-      (RobotState Nothing initBrain position) -- Object Attributes
+      (RobotState Nothing brain position) -- Object Attributes
 
 -------------
 -- Sensing --

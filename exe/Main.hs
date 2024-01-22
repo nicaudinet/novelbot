@@ -37,7 +37,7 @@ roomDims =
     }
 
 robotIds :: [Int]
-robotIds = [1]
+robotIds = [1 .. 10]
 
 ---------------
 -- GAME LOOP --
@@ -87,5 +87,5 @@ main = do
     () -- initial game attribute
     bindings -- input bindings
     gameCycle -- step action
-    (Timer 30) -- main loop timing (in milliseconds)
+    (Timer 200) -- main loop timing (in milliseconds)
     bmpList -- image files
